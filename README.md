@@ -2,6 +2,10 @@
 
 A modern, AI-powered news dashboard built with React, TypeScript, and Tailwind CSS. Features real-time news from NewsAPI and intelligent article summarization using Google's Gemini AI.
 
+**Vercel Deployment Note:**
+
+To avoid CORS errors with NewsAPI, this project uses a serverless function (`api/news.ts`) as a proxy. Always fetch news from `/api/news` in your frontend code. This keeps your NewsAPI key secret and works with browser security.
+
 ## ✨ Features
 
 - **Modern UI/UX**: Clean, responsive design with smooth animations and micro-interactions
