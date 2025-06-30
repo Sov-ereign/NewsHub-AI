@@ -22,11 +22,7 @@ export const fetchTopHeadlines = async (
   country: string = 'us'
 ): Promise<NewsResponse> => {
   try {
-    if (!NEWS_API_KEY || NEWS_API_KEY === 'your_news_api_key_here') {
-      throw new Error('NewsAPI key is not configured. Please add your API key to the .env file.');
-    }
-
-    const response = await newsAPI.get('/top-headlines', {
+    const response = await axios.get('/api/news', {
       params: {
         category,
         country,
@@ -35,14 +31,6 @@ export const fetchTopHeadlines = async (
     });
     return response.data;
   } catch (error) {
-    if (axios.isAxiosError(error)) {
-      if (error.response?.status === 426) {
-        throw new Error('Invalid or missing NewsAPI key. Please check your API key in the .env file.');
-      }
-      if (error.response?.status === 401) {
-        throw new Error('Unauthorized: Please check your NewsAPI key.');
-      }
-    }
     console.error('Error fetching headlines:', error);
     throw new Error('Failed to fetch news articles. Please check your API configuration.');
   }
