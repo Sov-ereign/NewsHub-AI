@@ -33,25 +33,8 @@ app.get('/api/news', async (req, res) => {
 // /api/summarize route
 app.post('/api/summarize', async (req, res) => {
   const geminiApiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-  const { article, text, title, content } = req.body;
-  // Support both old and new formats
-  let articleTitle = title;
-  let articleContent = content;
-  if (!articleTitle || !articleContent) {
-    // Try to extract from 'article' or 'text' if present
-    if (article && typeof article === 'object') {
-      articleTitle = article.title || '';
-      articleContent = article.content || article.description || '';
-    } else if (typeof text === 'object') {
-      articleTitle = text.title || '';
-      articleContent = text.content || text.description || '';
-    } else if (typeof article === 'string') {
-      articleContent = article;
-    } else if (typeof text === 'string') {
-      articleContent = text;
-    }
-  }
-  const articleText = articleContent || articleTitle;
+  const { article, text } = req.body;
+  const articleText = article || text;
 
   if (!geminiApiKey) {
     return res.status(500).json({ error: 'Missing GEMINI_API_KEY in environment variables.' });
@@ -61,66 +44,63 @@ app.post('/api/summarize', async (req, res) => {
   }
 
   try {
-    const geminiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + geminiApiKey;
-    const prompt = `Summarize the following news article in exactly 3 clear bullet points. Each point must start with a bullet (•) and be on its own line. Do not include any introduction or extra text. Only output the 3 bullet points, nothing else.\n\nTitle: ${articleTitle || '[No Title]'}\n\nContent: ${articleContent || articleText}\n\nFormat:\n• [First key point]\n• [Second key point]\n• [Third key point]`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key=${geminiApiKey}`;
+
+    const prompt = `
+You are an expert summarizer.
+
+Your task: Summarize the following article into **exactly 3 bullet points**.
+**Important rules**:
+- Each point must begin with **"- "** (dash and space)
+- **No paragraphs or extra explanation** allowed
+- **No intro or outro text**, just 3 bullet points
+- Format strictly as:
+
+- Point 1  
+- Point 2  
+- Point 3
+
+Do not break this format under any condition.
+
+Article:
+${articleText}
+    `;
 
     const payload = {
       contents: [
-        { parts: [ { text: prompt } ] }
+        { parts: [ { text: prompt.trim() } ] }
       ],
-      generationConfig: {
-        temperature: 0.4,
-        topK: 32,
-        topP: 1,
-        maxOutputTokens: 200,
-      }
+      safetySettings: [
+        { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+        { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+        { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' }
+      ]
     };
+
     const response = await axios.post(geminiUrl, payload);
-    // Log the raw Gemini response for debugging
-    let rawGeminiText = '';
-    if (response.data && response.data.candidates && response.data.candidates[0]?.content?.parts[0]?.text) {
-      rawGeminiText = response.data.candidates[0].content.parts[0].text;
-    } else {
-      rawGeminiText = JSON.stringify(response.data);
-    }
-    console.log('Raw Gemini response:', rawGeminiText);
-    // Improved helper to enforce 3 bullet points robustly
-    function enforceThreeBullets(text) {
-      // Extract lines starting with • or -
-      let bullets = text.split('\n').filter(line => line.trim().startsWith('•') || line.trim().startsWith('-'));
-      if (bullets.length === 3) return bullets.join('\n');
-      // Try to extract numbered list
-      let numbered = text.split('\n').filter(line => /^\s*\d+[.)]/.test(line.trim()));
-      if (numbered.length === 3) return numbered.map(line => '• ' + line.replace(/^\s*\d+[.)]\s*/, '')).join('\n');
-      // Split by sentence-ending punctuation or newlines
-      let sentences = text.match(/[^.!?\n]+[.!?]+/g) || [];
-      if (sentences.length < 3) {
-        // Fallback: split by period
-        sentences = text.split('. ').filter(Boolean);
-        if (sentences.length < 3) {
-          // Fallback: split into 3 roughly equal parts
-          const len = text.length;
-          const partLen = Math.ceil(len / 3);
-          sentences = [
-            text.slice(0, partLen),
-            text.slice(partLen, 2 * partLen),
-            text.slice(2 * partLen)
-          ];
-        }
-      }
-      let top3 = sentences.slice(0, 3).map(s => '• ' + s.trim().replace(/^[•-]/, '').trim());
-      return top3.join('\n');
-    }
-    // Try to extract summary from Gemini response
+
     let summary = '';
-    if (rawGeminiText) {
-      summary = enforceThreeBullets(rawGeminiText);
+    if (response.data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+      summary = response.data.candidates[0].content.parts[0].text;
     } else {
       summary = response.data;
     }
-    console.log('Processed summary:', summary);
-    res.json({ summary, rawGeminiText });
+
+    // Fallback: Reformat to bullet points if needed
+    if (summary && !summary.trim().startsWith('-')) {
+      summary = summary
+        .split('\n')
+        .filter(line => line.trim().length > 0)
+        .map(line => `- ${line.trim().replace(/^[-•*]\s*/, '')}`)
+        .slice(0, 3)
+        .join('\n');
+    }
+
+    res.json({ summary });
+
   } catch (error) {
+    console.error('Error calling Gemini:', error.response?.data || error.message);
     res.status(500).json({ error: 'Failed to summarize article.' });
   }
 });
@@ -133,4 +113,4 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
-} 
+}
