@@ -14,6 +14,7 @@ import {
 import { summarizeArticle } from '../services/geminiAPI';
 import { saveSummary } from '../utils/storage';
 import LoadingSpinner from './LoadingSpinner';
+import axios from 'axios';
 
 interface ArticleDetailProps {
   article: Article;
@@ -49,7 +50,11 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ article, onClose }) => {
 
     try {
       const contentToSummarize = article.content || article.description || '';
-      const generatedSummary = await summarizeArticle(contentToSummarize, article.title);
+      // Call backend directly
+      const response = await axios.post('/api/summarize', {
+        text: `${article.title}\n\n${contentToSummarize}`
+      });
+      const generatedSummary = response.data.summary;
       setSummary(generatedSummary);
 
       // Save to local storage

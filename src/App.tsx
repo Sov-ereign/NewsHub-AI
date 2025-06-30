@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Article, NewsCategory, LoadingState, ErrorState } from './types';
-import { fetchTopHeadlines, searchArticles } from './services/newsAPI';
 import { getCachedArticles, setCachedArticles } from './utils/storage';
 import Header from './components/Header';
 import CategoryTabs from './components/CategoryTabs';
 import ArticleList from './components/ArticleList';
 import ArticleDetail from './components/ArticleDetail';
 import SummariesView from './components/SummariesView';
+import axios from 'axios';
 
 function App() {
   const [currentView, setCurrentView] = useState<'home' | 'summaries'>('home');
@@ -41,11 +41,17 @@ function App() {
     setErrors(prev => ({ ...prev, articles: null }));
 
     try {
-      const response = await fetchTopHeadlines(category);
-      const validArticles = response.articles.filter(
-        article => article.title && article.title !== '[Removed]'
+      // Fetch from backend
+      const response = await axios.get('/api/news', {
+        params: {
+          category,
+          country: 'us',
+          pageSize: 20,
+        },
+      });
+      const validArticles = response.data.articles.filter(
+        (article: Article) => article.title && article.title !== '[Removed]'
       );
-      
       setArticles(validArticles);
       setCachedArticles(category, validArticles);
     } catch (error) {
@@ -65,12 +71,9 @@ function App() {
     setSearchQuery(query);
 
     try {
-      const response = await searchArticles(query);
-      const validArticles = response.articles.filter(
-        article => article.title && article.title !== '[Removed]'
-      );
-      
-      setArticles(validArticles);
+      // Use NewsAPI's /everything endpoint via backend if implemented, else fallback to error
+      setErrors(prev => ({ ...prev, articles: 'Search is currently unavailable.' }));
+      setArticles([]);
     } catch (error) {
       setErrors(prev => ({ ...prev, articles: 'Failed to search articles. Please try again.' }));
     } finally {
